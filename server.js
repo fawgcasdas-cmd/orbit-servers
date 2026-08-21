@@ -233,58 +233,17 @@ wss.on("connection", (ws, req) => {
         // ── PING ──
         if (type === "ping") {
             ws.send(JSON.stringify({ type: "pong" }));
-
-            const embed = new EmbedBuilder()
-                .setTitle("🟢 Bot Online")
-                .setColor(0x00ff88)
-                .addFields(
-                    { name: "Bot",    value: botName || "?", inline: true },
-                    { name: "Job ID", value: `\`${String(jobId).slice(0,16)}...\``, inline: true },
-                    { name: "Bots",   value: String(clients.size), inline: true }
-                )
-                .setFooter({ text: "Orbit WS" })
-                .setTimestamp();
-            postEmbed(LOG_CHANNEL, embed);
+            // kein Discord embed
         }
 
         // ── REBIRTH ──
         else if (type === "rebirth") {
-            const { rebirth, elapsed } = data;
-            const embed = new EmbedBuilder()
-                .setTitle(`✅ Rebirth ${rebirth} abgeschlossen!`)
-                .setColor(0x00FF88)
-                .addFields(
-                    { name: "Bot",     value: botName || "?",              inline: true },
-                    { name: "Rebirth", value: String(rebirth ?? "?"),      inline: true },
-                    { name: "Zeit",    value: elapsed || "?",              inline: true },
-                    { name: "Job ID",  value: `\`${String(jobId).slice(0,16)}...\``, inline: false }
-                )
-                .setFooter({ text: "Orbit WS • Rebirth" })
-                .setTimestamp();
-            postEmbed(REBIRTH_CHANNEL, embed);
-            postEmbed(LOG_CHANNEL, new EmbedBuilder()
-                .setTitle(`⭐ Rebirth ${rebirth} – ${botName}`)
-                .setColor(0x00FF88)
-                .addFields(
-                    { name: "Bot",  value: botName || "?", inline: true },
-                    { name: "Zeit", value: elapsed || "?", inline: true }
-                )
-                .setTimestamp()
-            );
+            // kein Discord embed
         }
 
         // ── HOP ──
         else if (type === "hop") {
-            const embed = new EmbedBuilder()
-                .setTitle("⚡ Bot hoppt Server")
-                .setColor(0x5865F2)
-                .addFields(
-                    { name: "Bot",    value: botName || "?", inline: true },
-                    { name: "Job ID", value: `\`${String(jobId).slice(0,16)}...\``, inline: true }
-                )
-                .setFooter({ text: "Orbit WS" })
-                .setTimestamp();
-            postEmbed(LOG_CHANNEL, embed);
+            // kein Discord embed
         }
 
         // ── BRAINROT FOUND ──
@@ -347,29 +306,18 @@ wss.on("connection", (ws, req) => {
                 .setTitle(title)
                 .setColor(color)
                 .addFields(
-                    { name: "Wert",      value: `$${valueStr}/s`, inline: true },
-                    { name: "Mutation",  value: bestMut || "None", inline: true },
-                    { name: "Owner",     value: owner || "?", inline: true },
-                    { name: "Duel",      value: isDuel ? "🔒 LOCKED" : "✅ FREE", inline: true },
-                    { name: "Carpet",    value: isCarpet ? "✅ Ja" : "❌ Nein", inline: true },
-                    { name: "Players",   value: `${players}/${maxPlayers}`, inline: true },
-                    { name: "Bot",       value: botName || "?", inline: true },
-                    { name: "Job ID",    value: `\`${String(jobId).slice(0,16)}...\``, inline: false },
-                    { name: "Pets",      value: `\`\`\`\n${petList || "?"}\`\`\``, inline: false },
-                    { name: "Spieler + Rebirths", value: `\`\`\`\n${playerList}\`\`\``, inline: false }
+                    { name: "Preis",    value: `$${valueStr}/s`,             inline: true },
+                    { name: "Mutation", value: bestMut || "None",            inline: true },
+                    { name: "Carpet",   value: isCarpet ? "✅ Ja" : "❌ Nein", inline: true },
+                    { name: "Spieler",  value: `${players}/${maxPlayers}`,   inline: true },
+                    { name: "Owner",    value: owner || "?",                 inline: true },
+                    { name: "Bot",      value: botName || "?",               inline: true },
+                    { name: "Job ID",   value: `\`${String(jobId)}\``,       inline: false },
                 )
                 .setFooter({ text: "Orbit WS • Brainrot" })
                 .setTimestamp();
 
             postEmbed(BRAINROT_CHANNEL, embed);
-            postEmbed(LOG_CHANNEL, new EmbedBuilder()
-                .setTitle(`🔔 Brainrot gefunden: ${bestPet}`)
-                .setColor(color)
-                .addFields({ name: "Bot", value: botName || "?", inline: true },
-                            { name: "Owner", value: owner || "?", inline: true },
-                            { name: "Wert", value: `$${valueStr}/s`, inline: true })
-                .setTimestamp()
-            );
         }
     });
 });
