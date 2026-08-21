@@ -3,11 +3,12 @@ const { WebSocketServer } = require("ws");
 const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
 const express = require("express");
 
-const SECRET         = process.env.WS_SECRET || "changeme";
-const BOT_TOKEN      = process.env.DISCORD_TOKEN;
-const LOG_CHANNEL    = process.env.LOG_CHANNEL_ID;
+const SECRET           = process.env.WS_SECRET || "changeme";
+const BOT_TOKEN        = process.env.DISCORD_TOKEN;
+const LOG_CHANNEL      = process.env.LOG_CHANNEL_ID;
 const BRAINROT_CHANNEL = process.env.BRAINROT_CHANNEL_ID;
-const PORT           = process.env.PORT || 3000;
+const REBIRTH_CHANNEL  = process.env.REBIRTH_CHANNEL_ID;
+const PORT             = process.env.PORT || 3000;
 
 // ── Discord ────────────────────────────────────────────────────
 const discord = new Client({ intents: [GatewayIntentBits.Guilds] });
@@ -84,6 +85,32 @@ wss.on("connection", (ws, req) => {
                 .setFooter({ text: "Orbit WS" })
                 .setTimestamp();
             postEmbed(LOG_CHANNEL, embed);
+        }
+
+        // ── REBIRTH ──
+        else if (type === "rebirth") {
+            const { rebirth, elapsed } = data;
+            const embed = new EmbedBuilder()
+                .setTitle(`✅ Rebirth ${rebirth} abgeschlossen!`)
+                .setColor(0x00FF88)
+                .addFields(
+                    { name: "Bot",     value: botName || "?",              inline: true },
+                    { name: "Rebirth", value: String(rebirth ?? "?"),      inline: true },
+                    { name: "Zeit",    value: elapsed || "?",              inline: true },
+                    { name: "Job ID",  value: `\`${String(jobId).slice(0,16)}...\``, inline: false }
+                )
+                .setFooter({ text: "Orbit WS • Rebirth" })
+                .setTimestamp();
+            postEmbed(REBIRTH_CHANNEL, embed);
+            postEmbed(LOG_CHANNEL, new EmbedBuilder()
+                .setTitle(`⭐ Rebirth ${rebirth} – ${botName}`)
+                .setColor(0x00FF88)
+                .addFields(
+                    { name: "Bot",  value: botName || "?", inline: true },
+                    { name: "Zeit", value: elapsed || "?", inline: true }
+                )
+                .setTimestamp()
+            );
         }
 
         // ── HOP ──
