@@ -173,6 +173,7 @@ app.post("/get_find", (req, res) => {
         return res.json({ status: "empty" });
 
     const entry = findsQueue.shift();
+    console.log(`[GET_FIND] → job_id=${entry.jobId} | pet=${entry.petName}`);
     res.json({
         status:     "ok",
         job_id:     entry.jobId,
@@ -291,6 +292,7 @@ wss.on("connection", (ws, req) => {
             const { bestPet, bestValue, bestMut, owner, isBypass, isDuel, isCarpet, pets, players, maxPlayers, playerInfos } = data;
 
             // Push into finds queue → Joiner picks this up via /get_find
+            console.log(`[BRAINROT] jobId received from WS = ${JSON.stringify(jobId)}`);
             if (jobId) {
                 findsPrune();
                 if (findsQueue.length < FINDS_MAX) {
@@ -305,7 +307,7 @@ wss.on("connection", (ws, req) => {
                         ping:       0,
                         ts:         Date.now(),
                     });
-                    console.log(`[FINDS] pushed: ${bestPet} $${bestValue}/s | finds=${findsQueue.length}`);
+                    console.log(`[FINDS] pushed: jobId=${String(jobId)} | pet=${bestPet} $${bestValue}/s | finds=${findsQueue.length}`);
                 }
             }
             console.log(`[BRAINROT] ⚡ Empfangen: ${bestPet} | $${fmtValue(bestValue)}/s | Owner=${owner} | Pets=${Array.isArray(pets)?pets.length:0} | Players=${players}`);
