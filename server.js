@@ -33,6 +33,18 @@ function findsPrune() {
     if (i > 0) findsQueue.splice(0, i);
 }
 
+// ── Notify Queue (brainrot_found → Notifier, separate copy) ───
+const notifyQueue = [];
+const NOTIFY_MAX  = 500;
+const NOTIFY_TTL  = 120_000;
+
+function notifyPrune() {
+    const cutoff = Date.now() - NOTIFY_TTL;
+    let i = 0;
+    while (i < notifyQueue.length && notifyQueue[i].ts < cutoff) i++;
+    if (i > 0) notifyQueue.splice(0, i);
+}
+
 function queuePrune() {
     const cutoff = Date.now() - QUEUE_TTL;
     let i = 0;
@@ -187,6 +199,30 @@ app.post("/get_find", (req, res) => {
     });
 });
 
+// POST /get_notify  — Sabcom Notifier pops from separate notify queue
+app.post("/get_notify", (req, res) => {
+    const { secret } = req.body || {};
+    if (secret !== SECRET) return res.status(403).json({ error: "forbidden" });
+
+    notifyPrune();
+    if (notifyQueue.length === 0)
+        return res.json({ status: "empty" });
+
+    const entry = notifyQueue.shift();
+    console.log(`[GET_NOTIFY] → job_id=${entry.jobId} | pet=${entry.petName}`);
+    res.json({
+        status:     "ok",
+        job_id:     entry.jobId,
+        petName:    entry.petName,
+        petValue:   entry.petValue,
+        petMut:     entry.petMut,
+        owner:      entry.owner,
+        playing:    entry.players,
+        maxPlayers: entry.maxPlayers,
+        ping:       entry.ping,
+    });
+});
+
 const server = app.listen(PORT, () => console.log(`[SERVER] Listening on port ${PORT}`));
 
 // ── WebSocket Server ───────────────────────────────────────────
@@ -253,20 +289,28 @@ wss.on("connection", (ws, req) => {
             // Push into finds queue → Joiner picks this up via /get_find
             console.log(`[BRAINROT] jobId received from WS = ${JSON.stringify(jobId)}`);
             if (jobId) {
+                const entry = {
+                    jobId:      String(jobId),
+                    petName:    bestPet   ?? null,
+                    petValue:   bestValue ?? null,
+                    petMut:     bestMut   ?? null,
+                    owner:      owner     ?? null,
+                    players:    players   ?? 0,
+                    maxPlayers: maxPlayers ?? 0,
+                    ping:       0,
+                    ts:         Date.now(),
+                };
+                // Joiner queue
                 findsPrune();
                 if (findsQueue.length < FINDS_MAX) {
-                    findsQueue.push({
-                        jobId:      String(jobId),
-                        petName:    bestPet   ?? null,
-                        petValue:   bestValue ?? null,
-                        petMut:     bestMut   ?? null,
-                        owner:      owner     ?? null,
-                        players:    players   ?? 0,
-                        maxPlayers: maxPlayers ?? 0,
-                        ping:       0,
-                        ts:         Date.now(),
-                    });
+                    findsQueue.push({ ...entry });
                     console.log(`[FINDS] pushed: jobId=${String(jobId)} | pet=${bestPet} $${bestValue}/s | finds=${findsQueue.length}`);
+                }
+                // Notifier queue (separate copy — not consumed by joiner)
+                notifyPrune();
+                if (notifyQueue.length < NOTIFY_MAX) {
+                    notifyQueue.push({ ...entry });
+                    console.log(`[NOTIFY] pushed: jobId=${String(jobId)} | pet=${bestPet} | notify=${notifyQueue.length}`);
                 }
             }
             console.log(`[BRAINROT] ⚡ Empfangen: ${bestPet} | $${fmtValue(bestValue)}/s | Owner=${owner} | Pets=${Array.isArray(pets)?pets.length:0} | Players=${players}`);
