@@ -29,8 +29,36 @@ function queuePrune() {
 }
 
 // ── Discord ────────────────────────────────────────────────────
-const discord = new Client({ intents: [GatewayIntentBits.Guilds] });
-discord.login(BOT_TOKEN).then(() => console.log("[DISCORD] Bot logged in"));
+const discord = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+    ]
+});
+
+let discordReady = false;
+discord.once("ready", async () => {
+    discordReady = true;
+    console.log(`[DISCORD] ✅ Bot eingeloggt als ${discord.user.tag}`);
+
+    // Startup-Test: alle Channels direkt prüfen
+    for (const [label, id] of [
+        ["LOG_CHANNEL",      LOG_CHANNEL],
+        ["BRAINROT_CHANNEL", BRAINROT_CHANNEL],
+        ["REBIRTH_CHANNEL",  REBIRTH_CHANNEL],
+    ]) {
+        if (!id) { console.error(`[DISCORD] ❌ ${label} nicht gesetzt`); continue; }
+        try {
+            const ch = await discord.channels.fetch(id);
+            if (ch) console.log(`[DISCORD] ✅ ${label} gefunden: #${ch.name}`);
+            else     console.error(`[DISCORD] ❌ ${label} = null`);
+        } catch (e) {
+            console.error(`[DISCORD] ❌ ${label} (${id}) FEHLER: ${e.message}`);
+        }
+    }
+});
+
+discord.login(BOT_TOKEN).catch(e => console.error("[DISCORD] Login fehlgeschlagen:", e.message));
 
 function fmtValue(v) {
     if (!v && v !== 0) return "?";
@@ -44,18 +72,29 @@ function fmtValue(v) {
 
 async function postEmbed(channelId, embed) {
     if (!channelId) {
-        console.error("[DISCORD] postEmbed: channelId ist undefined/null — ENV nicht gesetzt?");
+        console.error("[DISCORD] postEmbed: channelId nicht gesetzt — ENV fehlt?");
         return;
+    }
+    // Warte bis Bot ready ist (max 10s)
+    if (!discordReady) {
+        console.log("[DISCORD] Bot noch nicht ready — warte...");
+        const t0 = Date.now();
+        await new Promise(r => {
+            const iv = setInterval(() => {
+                if (discordReady || Date.now()-t0 > 10000) { clearInterval(iv); r(); }
+            }, 200);
+        });
+        if (!discordReady) {
+            console.error("[DISCORD] Bot immer noch nicht ready — abbruch");
+            return;
+        }
     }
     try {
         console.log(`[DISCORD] Sende in Channel ${channelId}...`);
         const ch = await discord.channels.fetch(channelId);
-        if (!ch) {
-            console.error(`[DISCORD] Channel ${channelId} nicht gefunden`);
-            return;
-        }
+        if (!ch) { console.error(`[DISCORD] Channel ${channelId} = null`); return; }
         await ch.send({ embeds: [embed] });
-        console.log(`[DISCORD] ✅ Gesendet in ${channelId}`);
+        console.log(`[DISCORD] ✅ Gesendet in #${ch.name} (${channelId})`);
     } catch (e) {
         console.error(`[DISCORD ERROR] Channel=${channelId} — ${e.message}`);
         console.error(e.stack);
