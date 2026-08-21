@@ -16,10 +16,22 @@ console.log("[CONFIG] REBIRTH_CHANNEL  =", REBIRTH_CHANNEL  || "❌ NICHT GESETZ
 console.log("[CONFIG] SECRET set       =", !!SECRET);
 console.log("[CONFIG] BOT_TOKEN set    =", !!BOT_TOKEN);
 
-// ── Server Queue (Fetcher → Railway → Lua) ────────────────────
-const serverQueue = [];          // {id, ping, fps, playing, maxPlayers, petName, petValue, petMut, owner, ts}
+// ── Server Queue (Fetcher → Railway → Lua scanner) ────────────
+const serverQueue = [];
 const QUEUE_MAX   = 2500;
-const QUEUE_TTL   = 30_000;     // 30 s – alte Einträge raus
+const QUEUE_TTL   = 30_000;
+
+// ── Finds Queue (brainrot_found → Joiner) ─────────────────────
+const findsQueue = [];           // {jobId, petName, petValue, petMut, owner, players, maxPlayers, ping, ts}
+const FINDS_MAX  = 500;
+const FINDS_TTL  = 120_000;     // 2 min
+
+function findsPrune() {
+    const cutoff = Date.now() - FINDS_TTL;
+    let i = 0;
+    while (i < findsQueue.length && findsQueue[i].ts < cutoff) i++;
+    if (i > 0) findsQueue.splice(0, i);
+}
 
 function queuePrune() {
     const cutoff = Date.now() - QUEUE_TTL;
@@ -151,6 +163,29 @@ app.post("/get_server", (req, res) => {
         owner:      entry.owner,
     });
 });
+// POST /get_find  — Joiner pops next brainrot find (has pet name/value)
+app.post("/get_find", (req, res) => {
+    const { secret } = req.body || {};
+    if (secret !== SECRET) return res.status(403).json({ error: "forbidden" });
+
+    findsPrune();
+    if (findsQueue.length === 0)
+        return res.json({ status: "empty" });
+
+    const entry = findsQueue.shift();
+    res.json({
+        status:     "ok",
+        job_id:     entry.jobId,
+        petName:    entry.petName,
+        petValue:   entry.petValue,
+        petMut:     entry.petMut,
+        owner:      entry.owner,
+        playing:    entry.players,
+        maxPlayers: entry.maxPlayers,
+        ping:       entry.ping,
+    });
+});
+
 const server = app.listen(PORT, () => console.log(`[SERVER] Listening on port ${PORT}`));
 
 // ── WebSocket Server ───────────────────────────────────────────
@@ -255,18 +290,22 @@ wss.on("connection", (ws, req) => {
         else if (type === "brainrot_found") {
             const { bestPet, bestValue, bestMut, owner, isBypass, isDuel, isCarpet, pets, players, maxPlayers, playerInfos } = data;
 
-            // Push into joiner queue so orbit_joiner.lua gets pet data too
+            // Push into finds queue → Joiner picks this up via /get_find
             if (jobId) {
-                queuePrune();
-                if (serverQueue.length < QUEUE_MAX) {
-                    serverQueue.push({
-                        id: String(jobId), ping: 0, fps: 60,
-                        playing: players ?? 0, maxPlayers: maxPlayers ?? 0,
-                        petName: bestPet ?? null, petValue: bestValue ?? null,
-                        petMut: bestMut ?? null, owner: owner ?? null,
-                        ts: Date.now(),
+                findsPrune();
+                if (findsQueue.length < FINDS_MAX) {
+                    findsQueue.push({
+                        jobId:      String(jobId),
+                        petName:    bestPet   ?? null,
+                        petValue:   bestValue ?? null,
+                        petMut:     bestMut   ?? null,
+                        owner:      owner     ?? null,
+                        players:    players   ?? 0,
+                        maxPlayers: maxPlayers ?? 0,
+                        ping:       0,
+                        ts:         Date.now(),
                     });
-                    console.log(`[QUEUE] brainrot_found pushed: ${bestPet} | queue=${serverQueue.length}`);
+                    console.log(`[FINDS] pushed: ${bestPet} $${bestValue}/s | finds=${findsQueue.length}`);
                 }
             }
             console.log(`[BRAINROT] ⚡ Empfangen: ${bestPet} | $${fmtValue(bestValue)}/s | Owner=${owner} | Pets=${Array.isArray(pets)?pets.length:0} | Players=${players}`);
