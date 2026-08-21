@@ -10,6 +10,18 @@ const BRAINROT_CHANNEL = process.env.BRAINROT_CHANNEL_ID;
 const REBIRTH_CHANNEL  = process.env.REBIRTH_CHANNEL_ID;
 const PORT             = process.env.PORT || 3000;
 
+// ── Server Queue (Fetcher → Railway → Lua) ────────────────────
+const serverQueue = [];          // {id, ping, fps, playing, maxPlayers, ts}
+const QUEUE_MAX   = 2500;
+const QUEUE_TTL   = 30_000;     // 30 s – alte Einträge raus
+
+function queuePrune() {
+    const cutoff = Date.now() - QUEUE_TTL;
+    let i = 0;
+    while (i < serverQueue.length && serverQueue[i].ts < cutoff) i++;
+    if (i > 0) serverQueue.splice(0, i);
+}
+
 // ── Discord ────────────────────────────────────────────────────
 const discord = new Client({ intents: [GatewayIntentBits.Guilds] });
 discord.login(BOT_TOKEN).then(() => console.log("[DISCORD] Bot logged in"));
@@ -24,9 +36,50 @@ async function postEmbed(channelId, embed) {
     }
 }
 
-// ── Express (Railway health check) ────────────────────────────
+// ── Express (Railway health check + HTTP broker) ───────────────
 const app = express();
+app.use(express.json());
 app.get("/", (_, res) => res.send("Orbit WS Server running"));
+
+// POST /feed  — Python fetcher pushes server batches here
+// Body: { secret: string, servers: [{id, ping, fps, playing, maxPlayers}] }
+app.post("/feed", (req, res) => {
+    const { secret, servers } = req.body || {};
+    if (secret !== SECRET) return res.status(403).json({ error: "forbidden" });
+    if (!Array.isArray(servers) || servers.length === 0)
+        return res.status(400).json({ error: "no servers" });
+
+    queuePrune();
+    const now = Date.now();
+    for (const s of servers) {
+        if (serverQueue.length >= QUEUE_MAX) break;
+        serverQueue.push({ id: s.id, ping: s.ping ?? 0, fps: s.fps ?? 60,
+                           playing: s.playing ?? 0, maxPlayers: s.maxPlayers ?? 0, ts: now });
+    }
+    console.log(`[FEED] +${servers.length} servers | queue=${serverQueue.length}`);
+    res.json({ ok: true, queued: serverQueue.length });
+});
+
+// POST /get_server  — Lua bot pops next server from queue
+// Body: { secret: string }
+app.post("/get_server", (req, res) => {
+    const { secret } = req.body || {};
+    if (secret !== SECRET) return res.status(403).json({ error: "forbidden" });
+
+    queuePrune();
+    if (serverQueue.length === 0)
+        return res.json({ status: "empty" });
+
+    const entry = serverQueue.shift();
+    res.json({
+        status:     "ok",
+        job_id:     entry.id,
+        ping:       entry.ping,
+        fps:        entry.fps,
+        playing:    entry.playing,
+        maxPlayers: entry.maxPlayers,
+    });
+});
 const server = app.listen(PORT, () => console.log(`[SERVER] Listening on port ${PORT}`));
 
 // ── WebSocket Server ───────────────────────────────────────────
