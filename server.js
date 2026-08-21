@@ -247,8 +247,8 @@ wss.on("connection", (ws, req) => {
 
         // ── BRAINROT FOUND ──
         else if (type === "brainrot_found") {
-            const { bestPet, bestValue, bestMut, owner, isBypass, isDuel, isCarpet, pets, players, maxPlayers } = data;
-            console.log(`[BRAINROT] ⚡ Empfangen: ${bestPet} | $${fmtValue(bestValue)}/s | Owner=${owner} | Pets=${Array.isArray(pets)?pets.length:0}`);
+            const { bestPet, bestValue, bestMut, owner, isBypass, isDuel, isCarpet, pets, players, maxPlayers, playerInfos } = data;
+            console.log(`[BRAINROT] ⚡ Empfangen: ${bestPet} | $${fmtValue(bestValue)}/s | Owner=${owner} | Pets=${Array.isArray(pets)?pets.length:0} | Players=${players}`);
 
             const valueStr = fmtValue(bestValue);
 
@@ -259,6 +259,18 @@ wss.on("connection", (ws, req) => {
                     petList += `#${i+1} ${mut}${p.name} ($${fmtValue(p.value)}/s)\n`;
                 });
                 if (pets.length > 10) petList += `... und ${pets.length - 10} mehr`;
+            }
+
+            // Spielerliste mit Rebirths
+            let playerList = "";
+            if (Array.isArray(playerInfos) && playerInfos.length > 0) {
+                playerInfos.slice(0, 15).forEach((p) => {
+                    const rb = p.rebirths != null ? `${fmtValue(p.rebirths)} RB` : "? RB";
+                    playerList += `${p.name} — ${rb}\n`;
+                });
+                if (playerInfos.length > 15) playerList += `... und ${playerInfos.length - 15} mehr`;
+            } else {
+                playerList = "?";
             }
 
             const color = bestValue >= 500_000_000 ? 0xFFAA00
@@ -281,7 +293,8 @@ wss.on("connection", (ws, req) => {
                     { name: "Players",   value: `${players}/${maxPlayers}`, inline: true },
                     { name: "Bot",       value: botName || "?", inline: true },
                     { name: "Job ID",    value: `\`${String(jobId).slice(0,16)}...\``, inline: false },
-                    { name: "Pets",      value: `\`\`\`\n${petList || "?"}\`\`\``, inline: false }
+                    { name: "Pets",      value: `\`\`\`\n${petList || "?"}\`\`\``, inline: false },
+                    { name: "Spieler + Rebirths", value: `\`\`\`\n${playerList}\`\`\``, inline: false }
                 )
                 .setFooter({ text: "Orbit WS • Brainrot" })
                 .setTimestamp();
