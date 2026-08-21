@@ -17,7 +17,7 @@ console.log("[CONFIG] SECRET set       =", !!SECRET);
 console.log("[CONFIG] BOT_TOKEN set    =", !!BOT_TOKEN);
 
 // ── Server Queue (Fetcher → Railway → Lua) ────────────────────
-const serverQueue = [];          // {id, ping, fps, playing, maxPlayers, ts}
+const serverQueue = [];          // {id, ping, fps, playing, maxPlayers, petName, petValue, petMut, owner, ts}
 const QUEUE_MAX   = 2500;
 const QUEUE_TTL   = 30_000;     // 30 s – alte Einträge raus
 
@@ -119,7 +119,9 @@ app.post("/feed", (req, res) => {
     for (const s of servers) {
         if (serverQueue.length >= QUEUE_MAX) break;
         serverQueue.push({ id: s.id, ping: s.ping ?? 0, fps: s.fps ?? 60,
-                           playing: s.playing ?? 0, maxPlayers: s.maxPlayers ?? 0, ts: now });
+                           playing: s.playing ?? 0, maxPlayers: s.maxPlayers ?? 0,
+                           petName: s.petName ?? null, petValue: s.petValue ?? null,
+                           petMut: s.petMut ?? null, owner: s.owner ?? null, ts: now });
     }
     console.log(`[FEED] +${servers.length} servers | queue=${serverQueue.length}`);
     res.json({ ok: true, queued: serverQueue.length });
@@ -143,6 +145,10 @@ app.post("/get_server", (req, res) => {
         fps:        entry.fps,
         playing:    entry.playing,
         maxPlayers: entry.maxPlayers,
+        petName:    entry.petName,
+        petValue:   entry.petValue,
+        petMut:     entry.petMut,
+        owner:      entry.owner,
     });
 });
 const server = app.listen(PORT, () => console.log(`[SERVER] Listening on port ${PORT}`));
@@ -248,6 +254,21 @@ wss.on("connection", (ws, req) => {
         // ── BRAINROT FOUND ──
         else if (type === "brainrot_found") {
             const { bestPet, bestValue, bestMut, owner, isBypass, isDuel, isCarpet, pets, players, maxPlayers, playerInfos } = data;
+
+            // Push into joiner queue so orbit_joiner.lua gets pet data too
+            if (jobId) {
+                queuePrune();
+                if (serverQueue.length < QUEUE_MAX) {
+                    serverQueue.push({
+                        id: String(jobId), ping: 0, fps: 60,
+                        playing: players ?? 0, maxPlayers: maxPlayers ?? 0,
+                        petName: bestPet ?? null, petValue: bestValue ?? null,
+                        petMut: bestMut ?? null, owner: owner ?? null,
+                        ts: Date.now(),
+                    });
+                    console.log(`[QUEUE] brainrot_found pushed: ${bestPet} | queue=${serverQueue.length}`);
+                }
+            }
             console.log(`[BRAINROT] ⚡ Empfangen: ${bestPet} | $${fmtValue(bestValue)}/s | Owner=${owner} | Pets=${Array.isArray(pets)?pets.length:0} | Players=${players}`);
 
             const valueStr = fmtValue(bestValue);
