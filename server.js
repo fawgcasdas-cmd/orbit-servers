@@ -10,6 +10,12 @@ const BRAINROT_CHANNEL = process.env.BRAINROT_CHANNEL_ID;
 const REBIRTH_CHANNEL  = process.env.REBIRTH_CHANNEL_ID;
 const PORT             = process.env.PORT || 3000;
 
+console.log("[CONFIG] LOG_CHANNEL      =", LOG_CHANNEL      || "❌ NICHT GESETZT");
+console.log("[CONFIG] BRAINROT_CHANNEL =", BRAINROT_CHANNEL || "❌ NICHT GESETZT");
+console.log("[CONFIG] REBIRTH_CHANNEL  =", REBIRTH_CHANNEL  || "❌ NICHT GESETZT");
+console.log("[CONFIG] SECRET set       =", !!SECRET);
+console.log("[CONFIG] BOT_TOKEN set    =", !!BOT_TOKEN);
+
 // ── Server Queue (Fetcher → Railway → Lua) ────────────────────
 const serverQueue = [];          // {id, ping, fps, playing, maxPlayers, ts}
 const QUEUE_MAX   = 2500;
@@ -26,13 +32,33 @@ function queuePrune() {
 const discord = new Client({ intents: [GatewayIntentBits.Guilds] });
 discord.login(BOT_TOKEN).then(() => console.log("[DISCORD] Bot logged in"));
 
+function fmtValue(v) {
+    if (!v && v !== 0) return "?";
+    if (v >= 1e15) return `${(v/1e15).toFixed(2)}Q`;
+    if (v >= 1e12) return `${(v/1e12).toFixed(2)}T`;
+    if (v >= 1e9)  return `${(v/1e9).toFixed(2)}B`;
+    if (v >= 1e6)  return `${(v/1e6).toFixed(2)}M`;
+    if (v >= 1e3)  return `${(v/1e3).toFixed(1)}K`;
+    return String(v);
+}
+
 async function postEmbed(channelId, embed) {
-    if (!channelId) return;
+    if (!channelId) {
+        console.error("[DISCORD] postEmbed: channelId ist undefined/null — ENV nicht gesetzt?");
+        return;
+    }
     try {
+        console.log(`[DISCORD] Sende in Channel ${channelId}...`);
         const ch = await discord.channels.fetch(channelId);
+        if (!ch) {
+            console.error(`[DISCORD] Channel ${channelId} nicht gefunden`);
+            return;
+        }
         await ch.send({ embeds: [embed] });
+        console.log(`[DISCORD] ✅ Gesendet in ${channelId}`);
     } catch (e) {
-        console.error("[DISCORD ERROR]", e.message);
+        console.error(`[DISCORD ERROR] Channel=${channelId} — ${e.message}`);
+        console.error(e.stack);
     }
 }
 
@@ -183,21 +209,15 @@ wss.on("connection", (ws, req) => {
         // ── BRAINROT FOUND ──
         else if (type === "brainrot_found") {
             const { bestPet, bestValue, bestMut, owner, isBypass, isDuel, isCarpet, pets, players, maxPlayers } = data;
+            console.log(`[BRAINROT] ⚡ Empfangen: ${bestPet} | $${fmtValue(bestValue)}/s | Owner=${owner} | Pets=${Array.isArray(pets)?pets.length:0}`);
 
-            const valueStr = bestValue >= 1e9  ? `${(bestValue/1e9).toFixed(2)}B`
-                           : bestValue >= 1e6  ? `${(bestValue/1e6).toFixed(2)}M`
-                           : bestValue >= 1e3  ? `${(bestValue/1e3).toFixed(1)}K`
-                           : String(bestValue);
+            const valueStr = fmtValue(bestValue);
 
             let petList = "";
             if (Array.isArray(pets)) {
                 pets.slice(0, 10).forEach((p, i) => {
                     const mut = p.mutation && p.mutation !== "None" ? `[${p.mutation}] ` : "";
-                    const val = p.value >= 1e9  ? `${(p.value/1e9).toFixed(2)}B`
-                              : p.value >= 1e6  ? `${(p.value/1e6).toFixed(2)}M`
-                              : p.value >= 1e3  ? `${(p.value/1e3).toFixed(1)}K`
-                              : String(p.value);
-                    petList += `#${i+1} ${mut}${p.name} ($${val}/s)\n`;
+                    petList += `#${i+1} ${mut}${p.name} ($${fmtValue(p.value)}/s)\n`;
                 });
                 if (pets.length > 10) petList += `... und ${pets.length - 10} mehr`;
             }
